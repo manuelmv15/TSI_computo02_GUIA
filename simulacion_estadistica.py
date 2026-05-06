@@ -478,6 +478,77 @@ def prueba_poker(ri: list, alpha: float = 0.05, decimales: int = 5) -> dict:
     }
 
 
+def prueba_huecos(ri: list, alpha_val: float = 0.0, beta_val: float = 0.5, alpha: float = 0.05) -> dict:
+    """
+    Prueba de Huecos (Gap Test) — H0: Las secuencias de huecos son independientes.
+    Busca ocurrencias en el intervalo [alpha_val, beta_val).
+    
+    Estadístico: Chi² = Σ (Oi - Ei)² / Ei
+    
+    Args:
+        ri        : lista de Ri ∈ [0,1)
+        alpha_val : Límite inferior del intervalo a observar
+        beta_val  : Límite superior del intervalo a observar
+        alpha     : Nivel de significancia
+    """
+    huecos = []
+    hueco_actual = 0
+    encontrado = False
+    
+    for r in ri:
+        if alpha_val <= r < beta_val:
+            if encontrado:
+                huecos.append(hueco_actual)
+            encontrado = True
+            hueco_actual = 0
+        else:
+            if encontrado:
+                hueco_actual += 1
+                
+    P = beta_val - alpha_val
+    N = len(huecos)
+    if N == 0:
+        return {"error": "No hay suficientes huecos para la prueba."}
+        
+    max_h = max(huecos) if huecos else 0
+    Oi = [0] * (max_h + 1)
+    for h in huecos:
+        Oi[h] += 1
+        
+    Ei = [N * P * ((1 - P) ** i) for i in range(max_h + 1)]
+    Ei[-1] += N * ((1 - P) ** (max_h + 1))
+    
+    min_ei = 3.0
+    while len(Ei) > 2 and Ei[-1] < min_ei:
+        Ei[-2] += Ei[-1]
+        Oi[-2] += Oi[-1]
+        Ei.pop()
+        Oi.pop()
+        
+    chi_calc = sum((o - e)**2 / e for o, e in zip(Oi, Ei))
+    gl = len(Ei) - 1
+    
+    if gl <= 0:
+        chi_calc = 0.0
+        gl = 1
+        chi_crit = _chi2_ppf(1 - alpha, df=gl)
+        acepta = True
+    else:
+        chi_crit = _chi2_ppf(1 - alpha, df=gl)
+        acepta = chi_calc <= chi_crit
+
+    return {
+        "N_huecos": N,
+        "intervalo": f"[{alpha_val}, {beta_val})",
+        "chi2_calculado": round(chi_calc, 6),
+        "chi2_critico": round(chi_crit, 6),
+        "GL": gl, "alpha": alpha,
+        "acepta_H0": acepta,
+        "decision": "✅ Se acepta H0 (huecos aleatorios)" if acepta else "❌ Se rechaza H0 (patrón de huecos)"
+    }
+
+
+
 # ─────────────────────────────────────────────────────────────
 #  SECCIÓN 3: PRESENTACIÓN DE RESULTADOS
 # ─────────────────────────────────────────────────────────────
@@ -562,25 +633,29 @@ def _ejecutar_pruebas(ri: list):
     print("\n  Pruebas disponibles:")
     print("  [1] Media        [2] Varianza      [3] Uniformidad")
     print("  [4] Series       [5] Corridas A/B  [6] Corridas Media")
-    print("  [7] Póker        [8] TODAS")
-    sel = set(s.strip() for s in input("  Selección (ej: 1,3,7  o  8): ").split(","))
+    print("  [7] Póker        [8] Huecos        [9] TODAS")
+    sel = set(s.strip() for s in input("  Selección (ej: 1,3,7  o  9): ").split(","))
 
-    if "8" in sel or "1" in sel:
+    if "9" in sel or "1" in sel:
         imprimir_resultado(prueba_media(ri, alpha), "PRUEBA DE MEDIA")
-    if "8" in sel or "2" in sel:
+    if "9" in sel or "2" in sel:
         imprimir_resultado(prueba_varianza(ri, alpha), "PRUEBA DE VARIANZA")
-    if "8" in sel or "3" in sel:
+    if "9" in sel or "3" in sel:
         k = _pedir_int("  k intervalos para uniformidad [10]: ", default=10)
         imprimir_resultado(prueba_uniformidad_chi2(ri, k, alpha), "PRUEBA DE UNIFORMIDAD")
-    if "8" in sel or "4" in sel:
+    if "9" in sel or "4" in sel:
         k = _pedir_int("  k divisiones para series [10]: ", default=10)
         imprimir_resultado(prueba_series(ri, k, alpha), "PRUEBA DE SERIES")
-    if "8" in sel or "5" in sel:
+    if "9" in sel or "5" in sel:
         imprimir_resultado(prueba_corridas_arriba_abajo(ri, alpha), "PRUEBA DE CORRIDAS (Arriba/Abajo)")
-    if "8" in sel or "6" in sel:
+    if "9" in sel or "6" in sel:
         imprimir_resultado(prueba_corridas_media(ri, alpha), "PRUEBA DE CORRIDAS (Media)")
-    if "8" in sel or "7" in sel:
+    if "9" in sel or "7" in sel:
         imprimir_resultado(prueba_poker(ri, alpha), "PRUEBA DE PÓKER")
+    if "9" in sel or "8" in sel:
+        alpha_val = _pedir_float("  Límite inferior de huecos [0.0]: ", default=0.0)
+        beta_val = _pedir_float("  Límite superior de huecos [0.5]: ", default=0.5)
+        imprimir_resultado(prueba_huecos(ri, alpha_val, beta_val, alpha), "PRUEBA DE HUECOS")
 
 
 def menu_interactivo():
